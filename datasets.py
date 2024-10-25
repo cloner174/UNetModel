@@ -31,8 +31,8 @@ class FullyAnnotatedDataset(Dataset):
         label = self.labels[idx]       # scalar
         
         image = torch.tensor(image, dtype=torch.float32).unsqueeze(0)  # [1, H, W]
-        mask = torch.tensor(mask, dtype=torch.long)                    # [H, W]
-        box = torch.tensor(box, dtype=torch.float32)                   # [bbox_size]
+        mask = torch.tensor(mask, dtype=torch.long)                   # [H, W]
+        box = torch.tensor(box, dtype=torch.float32).view(-1)                    # [bbox_size]
         label = torch.tensor(label, dtype=torch.float32)               # [1]
         
         box = box / 64.0

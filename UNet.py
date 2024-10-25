@@ -36,6 +36,7 @@ class MultitaskAttentionUNet(nn.Module):
         self.seg_out = nn.Conv2d(64, num_classes, kernel_size=1)
         
         self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
             nn.Linear(1024 * 1 * 1, 256),
             nn.ReLU(inplace=True),
@@ -44,6 +45,7 @@ class MultitaskAttentionUNet(nn.Module):
         )
         
         self.localization = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
             nn.Linear(1024 * 1 * 1, 256),
             nn.ReLU(inplace=True),

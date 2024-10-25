@@ -46,7 +46,7 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
         train_total = 0
         
         for batch in tqdm(annotated_loader, desc=f'Epoch {epoch}/{num_epochs} - Annotated Training'):
-            images_a, masks_a, boxes_a, labels_a = batch
+            images_a, masks_a, labels_a, boxes_a = batch
             images_a = images_a.to(device)
             masks_a = masks_a.to(device)
             boxes_a = boxes_a.to(device)

@@ -21,19 +21,11 @@ def go(base_dir):
     boxes = np.load(os.path.join(base_dir, 'boxes.npy'))
     y_class = np.load(os.path.join(base_dir, 'y_class.npy'))
     
-    annotated_indices = np.where(masks != -1)[0]
-    weakly_annotated_indices = np.where(masks == -1)[0]
-    
-    X_annotated = X[annotated_indices]
-    masks_annotated = masks[annotated_indices]
-    boxes_annotated = boxes[annotated_indices]
-    y_train_annotated = y_class[annotated_indices]
-    
-    X_weak = X[weakly_annotated_indices]
-    y_train_weak = y_class[weakly_annotated_indices]
+    X_weak = None
+    y_train_weak = None
     
     X_train, X_val, masks_train, masks_val, boxes_train, boxes_val, y_train, y_val = train_test_split(
-        X_annotated, masks_annotated, boxes_annotated, y_train_annotated,
+        X , masks, boxes, y_class,
         test_size=0.2, random_state=42
     )
     
