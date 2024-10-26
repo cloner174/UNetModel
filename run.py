@@ -2,13 +2,12 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 
 from datasets import FullyAnnotatedDataset, WeaklyAnnotatedDataset
 from main import train_model
 from UNet import MultitaskAttentionUNet, MultitaskAttentionUNet_Pretrained
 from utils import visualize_predictions
-
 
 
 def go(base_dir, pro= False):
@@ -24,10 +23,18 @@ def go(base_dir, pro= False):
     X_weak = np.load(os.path.join(base_dir, 'images.npy'))
     y_train_weak = np.load(os.path.join(base_dir, 'labels.npy'))
     
-    X_train, X_val, masks_train, masks_val, boxes_train, boxes_val, y_train, y_val = train_test_split(
-        X , masks, boxes, y_class,
-        test_size=0.2, random_state=42, shuffle=True
-    )
+    skf = StratifiedKFold(n_splits=5)
+    for i, (train_index, test_index) in enumerate(skf.split(X, y_class)):
+        X_train, X_val = X[train_index], X[test_index]
+        masks_train, masks_val = masks[train_index], masks[test_index]
+        boxes_train, boxes_val = boxes[train_index], boxes[test_index]
+        y_train, y_val = y_class[train_index], y_class[test_index]
+        break
+    
+    #X_train, X_val, masks_train, masks_val, boxes_train, boxes_val, y_train, y_val = train_test_split(
+    #    X , masks, boxes, y_class,
+    #    test_size=0.2, random_state=42, shuffle=True
+    #)
     
     annotated_dataset = FullyAnnotatedDataset(X_train, masks_train, boxes_train, y_train, transform=None)
     weak_dataset = WeaklyAnnotatedDataset(X_weak, y_train_weak, transform=None)
