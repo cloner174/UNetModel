@@ -139,15 +139,24 @@ class AttentionGate(nn.Module):
         psi = self.relu(g1 + x1)
         psi = self.psi(psi)
         return x * psi
+    
 
 
 class MultitaskAttentionUNet_Pretrained(nn.Module):
     
-    def __init__(self, input_channels=1, num_classes=2, bbox_size=6):
+    def __init__(self, input_channels=1, num_classes=2, bbox_size=4 , weight_path = None):
         super(MultitaskAttentionUNet_Pretrained, self).__init__()
-        from torchvision.models import ResNet34_Weights
         # Encoder: Pretrained ResNet34
-        self.encoder = models.resnet34(weights=ResNet34_Weights.IMAGENET1K_V1)
+        if weight_path is None:
+            weight_path = './weights/resnet34.pth'
+        
+        try:
+            self.encoder = models.resnet34(weights=None)
+            state_dict = torch.load(weight_path, weights_only=True)
+            self.encoder.load_state_dict(state_dict)
+        except:
+            from torchvision.models import ResNet34_Weights
+            self.encoder = models.resnet34(weights= ResNet34_Weights.IMAGENET1K_V1)
         
         if input_channels != 3:
             self.encoder.conv1 = nn.Conv2d(input_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
