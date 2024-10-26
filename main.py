@@ -33,19 +33,24 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
     criterion_loc = nn.SmoothL1Loss()
     
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+    lr_currrent = scheduler.get_last_lr()
     
     best_val_loss = float('inf')
     counter = 0
+    
     for epoch in range(1, num_epochs + 1):
+        if scheduler.get_last_lr() != lr_currrent:
+            print(f"Update Learning Rate: {scheduler.get_last_lr()/lr_currrent}")
+            lr_currrent = scheduler.get_last_lr()
         
         model.train()
         train_seg_loss = 0.0
         train_cls_loss = 0.0
         train_loc_loss = 0.0
         train_total = 0
-        
         for batch in tqdm(annotated_loader, desc=f'Epoch {epoch}/{num_epochs} - Annotated Training'):
+            
             images_a, masks_a, labels_a, boxes_a = batch
             images_a = images_a.to(device)
             masks_a = masks_a.to(device)
@@ -72,6 +77,7 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
             train_total += images_a.size(0)
         
         for batch in tqdm(weak_loader, desc=f'Epoch {epoch}/{num_epochs} - Weak Training'):
+            
             images_w, labels_w = batch
             images_w = images_w.to(device)
             labels_w = labels_w.to(device).unsqueeze(1)
@@ -109,10 +115,17 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
         val_total = 0
         correct_cls = 0
         total_cls = 0
-        
+        dice_score = 0.0
+        iou_score = 0.0
+        precision = 0.0
+        recall = 0.0
+        f1 = 0.0
+        roc_auc = 0.0
+        mae = 0.0
         with torch.no_grad():
             for batch in tqdm(val_loader, desc=f'Epoch {epoch}/{num_epochs} - Validation'):
-                images, masks, boxes, labels = batch
+                
+                images, masks, labels, boxes  = batch
                 images = images.to(device)
                 masks = masks.to(device)
                 boxes = boxes.to(device)
@@ -161,7 +174,6 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
         mae /= val_total
         
         scheduler.step(avg_val_loss)
-        
         print(f'Epoch [{epoch}/{num_epochs}] '
               f'Train Loss: {avg_train_loss:.4f} (Seg: {avg_train_seg_loss:.4f}, '
               f'Cls: {avg_train_cls_loss:.4f}, Loc: {avg_train_loc_loss:.4f}) '
