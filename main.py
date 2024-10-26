@@ -1,59 +1,51 @@
+# main.py
 import os
 from tqdm import tqdm
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 
 from metrics import calculate_segmentation_metrics, calculate_classification_metrics, calculate_localization_metrics
-
+from losses import CombinedLoss
 
 
 def generate_pseudo_labels(outputs_seg, threshold=0.7):
-    """
-    Generates pseudo-labels based on model confidence.
-    Args:
-        outputs_seg (Tensor): Raw segmentation outputs from the model. Shape [B, C, H, W].
-        threshold (float): Confidence threshold for pseudo-labeling.
-    Returns:
-        pseudo_masks (Tensor): Pseudo-labels with shape [B, H, W].
-        mask_confident (Tensor): Boolean mask indicating high-confidence pixels. Shape [B, H, W].
-    """
-    probs = F.softmax(outputs_seg, dim=1)  # [B, C, H, W]
-    max_probs, pseudo_masks = torch.max(probs, dim=1)  # [B, H, W], [B, H, W]
-    mask_confident = max_probs > threshold  # [B, H, W]
+    probs = torch.sigmoid(outputs_seg)
+    mask_confident = (probs > threshold) | (probs < (1 - threshold))
+    pseudo_masks = (probs > 0.5).float()
     return pseudo_masks, mask_confident
 
 
-
-def train_model(model, annotated_loader, weak_loader, val_loader, device, num_epochs=50, patience=10, base_dir='./'):
+def train_model(model, annotated_loader, weak_loader, val_loader, device, hyperparams, base_dir='./'):
     
-    criterion_seg = nn.CrossEntropyLoss()
+    learning_rate = hyperparams.get('learning_rate', 1e-4)
+    batch_size = hyperparams.get('batch_size', 4)
+    num_epochs = hyperparams.get('num_epochs', 50)
+    weight_decay = hyperparams.get('weight_decay', 1e-5)
+    criterion_seg = CombinedLoss()
     criterion_cls = nn.BCEWithLogitsLoss()
     criterion_loc = nn.SmoothL1Loss()
     
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
-    lr_currrent = scheduler.get_last_lr()
+    lr_current = scheduler.optimizer.param_groups[0]['lr']
     
+    patience = hyperparams.get('patience', 10)
     best_val_loss = float('inf')
     counter = 0
     
     for epoch in range(1, num_epochs + 1):
-        if scheduler.get_last_lr() != lr_currrent:
-            print(f"Update Learning Rate: {scheduler.get_last_lr()/lr_currrent}")
-            lr_currrent = scheduler.get_last_lr()
         
         model.train()
         train_seg_loss = 0.0
         train_cls_loss = 0.0
         train_loc_loss = 0.0
         train_total = 0
+        
         for batch in tqdm(annotated_loader, desc=f'Epoch {epoch}/{num_epochs} - Annotated Training'):
-            
             images_a, masks_a, labels_a, boxes_a = batch
             images_a = images_a.to(device)
-            masks_a = masks_a.to(device)
+            masks_a = masks_a.to(device).float()
             boxes_a = boxes_a.to(device)
             labels_a = labels_a.to(device).unsqueeze(1)
             
@@ -77,7 +69,6 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
             train_total += images_a.size(0)
         
         for batch in tqdm(weak_loader, desc=f'Epoch {epoch}/{num_epochs} - Weak Training'):
-            
             images_w, labels_w = batch
             images_w = images_w.to(device)
             labels_w = labels_w.to(device).unsqueeze(1)
@@ -88,18 +79,19 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
             
             loss_cls_w = criterion_cls(outputs_cls_w, labels_w)
             
-            preds_seg_w = torch.argmax(outputs_seg_w, dim=1)
-            pseudo_masks_w = preds_seg_w  # Hard pseudo-labels
+            pseudo_masks_w, mask_confident = generate_pseudo_labels(outputs_seg_w)
             
-            loss_seg_w = criterion_seg(outputs_seg_w, pseudo_masks_w)            
-            
-            loss_w = loss_cls_w + loss_seg_w
+            if mask_confident.sum() > 0:
+                loss_seg_w = criterion_seg(outputs_seg_w[mask_confident], pseudo_masks_w[mask_confident])
+                loss_w = loss_cls_w + loss_seg_w
+            else:
+                loss_w = loss_cls_w
             
             loss_w.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
-            train_seg_loss += loss_seg_w.item() * images_w.size(0)
+            train_seg_loss += loss_seg_w.item() * mask_confident.sum().item() if mask_confident.sum() > 0 else 0.0
             train_cls_loss += loss_cls_w.item() * images_w.size(0)
             train_total += images_w.size(0)
         
@@ -124,10 +116,9 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
         mae = 0.0
         with torch.no_grad():
             for batch in tqdm(val_loader, desc=f'Epoch {epoch}/{num_epochs} - Validation'):
-                
-                images, masks, labels, boxes  = batch
+                images, masks, labels, boxes = batch
                 images = images.to(device)
-                masks = masks.to(device)
+                masks = masks.to(device).float()
                 boxes = boxes.to(device)
                 labels = labels.to(device).unsqueeze(1)
                 
@@ -136,7 +127,6 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
                 loss_seg_val = criterion_seg(outputs_seg, masks)
                 loss_cls_val = criterion_cls(outputs_cls, labels)
                 loss_loc_val = criterion_loc(outputs_loc, boxes)
-                
                 val_seg_loss += loss_seg_val.item() * images.size(0)
                 val_cls_loss += loss_cls_val.item() * images.size(0)
                 val_loc_loss += loss_loc_val.item() * images.size(0)
@@ -145,8 +135,8 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
                 preds_cls = (torch.sigmoid(outputs_cls) > 0.5).float()
                 correct_cls += (preds_cls == labels).sum().item()
                 total_cls += labels.size(0)
-        
-                dice, iou = calculate_segmentation_metrics(torch.argmax(outputs_seg, dim=1), masks, num_classes=13)
+                
+                dice, iou = calculate_segmentation_metrics(torch.sigmoid(outputs_seg), masks)
                 dice_score += dice * images.size(0)
                 iou_score += iou * images.size(0)
                 
@@ -196,37 +186,33 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
                 break
 
 
-
 def train_model_pro(model, annotated_loader, weak_loader, val_loader, device, num_epochs=50, patience=10, base_dir='./'):
-    # Define loss functions
+    
     criterion_seg = nn.CrossEntropyLoss()
     criterion_cls = nn.BCEWithLogitsLoss()
     criterion_loc = nn.SmoothL1Loss(reduction='mean')  # or any other suitable loss
-
-    # Define optimizer and scheduler
+    
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
-
+    
     best_val_loss = float('inf')
     counter = 0
-
+    
     for epoch in range(1, num_epochs + 1):
         model.train()
         train_seg_loss = 0.0
         train_cls_loss = 0.0
         train_loc_loss = 0.0
         train_total = 0
-
-        # Iterate over annotated data
+        
         for batch in tqdm(annotated_loader, desc=f'Epoch {epoch}/{num_epochs} - Annotated Training'):
             images_a, masks_a, boxes_a, labels_a = batch
             images_a = images_a.to(device)
             masks_a = masks_a.to(device)
             boxes_a = boxes_a.to(device)
             labels_a = labels_a.to(device).unsqueeze(1)
-
-            optimizer.zero_grad()
             
+            optimizer.zero_grad()
             outputs_seg_a, outputs_cls_a, outputs_loc_a = model(images_a)
             
             loss_seg_a = criterion_seg(outputs_seg_a, masks_a)
