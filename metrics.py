@@ -22,7 +22,7 @@ def calculate_segmentation_metrics_single_channel(preds, masks):
     return dice, iou
 
 
-def calculate_segmentation_metrics(preds, masks, num_classes):
+def calculate_segmentation_metrics(preds, masks, num_classes = 1):
     """
     Calculate Dice Coefficient and IoU for segmentation.
     preds: Tensor of shape [B, H, W]
