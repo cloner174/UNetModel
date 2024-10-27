@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 class MultitaskAttentionUNet(nn.Module):
     
-    def __init__(self, input_channels=1, num_classes=13, bbox_size=6):
+    def __init__(self, input_channels=1, num_classes=1, bbox_size=4):
         super(MultitaskAttentionUNet, self).__init__()
         
         self.enc1 = self.conv_block(input_channels, 64)
