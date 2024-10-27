@@ -182,7 +182,8 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
         mae /= val_total if mae != 0 else 1
         
         scheduler.step(avg_val_loss)
-        print(f'Epoch [{epoch}/{num_epochs}] '
+        print(''
+              f'Epoch [{epoch}/{num_epochs}] '
               f'Train Loss: {avg_train_loss:.4f} (Seg: {avg_train_seg_loss:.4f}, '
               f'Cls: {avg_train_cls_loss:.4f}, Loc: {avg_train_loc_loss:.4f}) '
               f'Val Loss: {avg_val_loss:.4f} (Seg: {avg_val_seg_loss:.4f}, '
@@ -190,7 +191,8 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
               f'Val Acc: {val_accuracy:.4f} '
               f'Dice: {dice_score:.4f} IoU: {iou_score:.4f} '
               f'Precision: {precision:.4f} Recall: {recall:.4f} F1: {f1:.4f} '
-              f'ROC-AUC: {roc_auc:.4f} MAE: {mae:.4f}')
+              f'ROC-AUC: {roc_auc:.4f} MAE: {mae:.4f}'
+              '')
         
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
