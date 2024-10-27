@@ -9,7 +9,19 @@ from metrics import calculate_segmentation_metrics, calculate_classification_met
 from losses import CombinedLoss
 
 
-def train_model(model, annotated_loader, weak_loader, val_loader, device, num_epochs=50, patience=10, base_dir='./'):
+def train_model(model, 
+                annotated_loader, 
+                weak_loader, 
+                val_loader,
+                device, 
+                num_epochs=50, 
+                patience=10, 
+                base_dir='./', 
+                num_positive = None,
+                num_negative = None, 
+                w_seg = None,
+                w_cls = None,
+                w_loc = None):
     """
     Train the model using the specified approach.
     
@@ -26,9 +38,14 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
     Returns:
         None
     """
+    if num_positive is not None and num_negative is not None:
+        pos_weight_value = num_negative / (num_positive + 1e-5)
+        pos_weight = torch.tensor([pos_weight_value]).to(device)
+        criterion_cls = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    else:
+        criterion_cls = nn.BCEWithLogitsLoss()
     
     criterion_seg = CombinedLoss()
-    criterion_cls = nn.BCEWithLogitsLoss()
     criterion_loc = nn.SmoothL1Loss()
     
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
@@ -70,7 +87,10 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
             else:
                 loss_loc_a = torch.tensor(0.0, device=device)
             
-            loss_a = loss_seg_a + loss_cls_a + loss_loc_a
+            if w_seg is not None and w_cls is not None and w_loc is not None:
+                loss_a = w_seg * loss_seg_a + w_cls * loss_cls_a + w_loc * loss_loc_a
+            else:
+                loss_a = loss_seg_a + loss_cls_a + loss_loc_a
             
             loss_a.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -170,7 +190,12 @@ def train_model(model, annotated_loader, weak_loader, val_loader, device, num_ep
         avg_val_seg_loss = val_seg_loss / val_total
         avg_val_cls_loss = val_cls_loss / val_total
         avg_val_loc_loss = val_loc_loss / val_total
-        avg_val_loss = avg_val_seg_loss + avg_val_cls_loss + avg_val_loc_loss
+        
+        if w_seg is not None and w_cls is not None and w_loc is not None:
+            avg_val_loss = w_seg * avg_val_seg_loss + w_cls * avg_val_cls_loss + w_loc * avg_val_loc_loss
+        else:
+            avg_val_loss = avg_val_seg_loss + avg_val_cls_loss + avg_val_loc_loss
+        
         val_accuracy = correct_cls / total_cls
         
         dice_score /= val_total
