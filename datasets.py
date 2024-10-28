@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 
 class FullyAnnotatedDataset(Dataset):
     
-    def __init__(self, images, masks, boxes, labels, transform=None, set_boxes_to_label = False):
+    def __init__(self, images, masks, boxes, labels, transform=None, set_boxes_to_label = False, for_visual = False):
         """
         images: NumPy array of shape [N, H, W]
         masks: NumPy array of shape [N, H, W] with integer class labels or -1 for weakly annotated
@@ -17,6 +17,8 @@ class FullyAnnotatedDataset(Dataset):
         self.boxes = boxes
         self.labels = labels
         self.transform = transform
+        
+        self.for_visual = for_visual
         
         if set_boxes_to_label:
             self.boxes[self.labels == 0] = 0.0
@@ -31,7 +33,12 @@ class FullyAnnotatedDataset(Dataset):
         label = self.labels[idx]       # scalar
         
         image = torch.tensor(image, dtype=torch.float32).unsqueeze(0)  # [1, H, W]
-        mask = torch.tensor(mask, dtype=torch.long)                   # [H, W]
+        
+        if self.for_visual:
+            mask = torch.tensor(mask, dtype=torch.long)
+        else:
+            mask = torch.tensor(mask, dtype=torch.long).unsqueeze(0)   # [H, W]
+        
         box = torch.tensor(box, dtype=torch.float32).view(-1)                    # [bbox_size]
         label = torch.tensor(label, dtype=torch.float32)               # [1]
         
