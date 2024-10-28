@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 
 
-def visualize_predictions(model, dataloader, device, num_samples=5, num_classes=13):
+def visualize_predictions(model, dataloader, device, num_samples=5, num_classes=1):
     
     model.eval()
     images_shown = 0
@@ -36,7 +36,7 @@ def visualize_predictions(model, dataloader, device, num_samples=5, num_classes=
                 
                 img = images[i].cpu().squeeze().numpy()
                 if is_annotated:
-                    true_mask = masks[i].cpu().numpy()
+                    true_mask = masks[i].squeeze().cpu().numpy()
                     true_box = boxes[i].cpu().numpy() * 64.0
                     true_label = labels[i].item()
                 else:
@@ -44,9 +44,17 @@ def visualize_predictions(model, dataloader, device, num_samples=5, num_classes=
                     true_box = None
                     true_label = 1
                 
-                pred_mask = preds_seg[i].cpu().numpy()
+                
                 pred_cls = preds_cls[i].item()
+                
+                if int(pred_cls) == 1 :
+                    pred = torch.sigmoid(outputs_seg[i])
+                    pred_mask = pred.squeeze().cpu().numpy()
+                else:
+                    pred_mask = preds_seg[i].cpu().numpy()
+                
                 pred_box = preds_loc[i].cpu().numpy()
+                
                 
                 plt.subplot(num_samples, 6, images_shown * 6 + 1)
                 plt.imshow(img, cmap='gray')
@@ -55,7 +63,7 @@ def visualize_predictions(model, dataloader, device, num_samples=5, num_classes=
                 
                 if is_annotated:
                     plt.subplot(num_samples, 6, images_shown * 6 + 2)
-                    plt.imshow(true_mask, cmap='jet', vmin=0, vmax=num_classes-1)
+                    plt.imshow(true_mask, cmap='jet')
                     plt.title('True Mask')
                     plt.axis('off')
                 else:
@@ -63,7 +71,7 @@ def visualize_predictions(model, dataloader, device, num_samples=5, num_classes=
                     plt.axis('off')
                 
                 plt.subplot(num_samples, 6, images_shown * 6 + 3)
-                plt.imshow(pred_mask, cmap='jet', vmin=0, vmax=num_classes-1)
+                plt.imshow(pred_mask, cmap='jet')
                 plt.title('Predicted Mask')
                 plt.axis('off')
                 

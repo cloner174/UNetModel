@@ -7,7 +7,7 @@ def dice_loss(pred, target, smooth=1e-5):
     """
     Compute Dice Loss.
     """
-    pred = torch.sigmoid(pred)  # Apply sigmoid to get probabilities
+    pred = torch.sigmoid(pred)
     pred = pred.contiguous()
     target = target.contiguous()
     intersection = (pred * target).sum(dim=(2, 3))
