@@ -88,27 +88,19 @@ c1 = 1.5
 c2 = 1.5
 w = 0.5
 
-
-
-# ============================== #
-#          Configuration          #
-# ============================== #
-
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] %(levelname)s - %(message)s',
-    filename = 
     handlers=[
         logging.StreamHandler()
     ]
 )
+
 logger = logging.getLogger(__name__)
 
 writer = SummaryWriter('runs/pso_experiment')
-
-
 
 def dice_coefficient(pred: torch.Tensor, target: torch.Tensor, smooth: float = 1e-5) -> float:
     """
@@ -146,8 +138,8 @@ def fitness_function(model: torch.nn.Module, data_loader: DataLoader) -> float:
     dice_scores = []
     with torch.no_grad():
         for batch_idx, (images, masks, _, _) in enumerate(data_loader):
-            images = images.to(DEVICE)
-            masks = masks.to(DEVICE)
+            images = images.to(device)
+            masks = masks.to(device)
             
             outputs, *rest = model(images)
             outputs = torch.sigmoid(outputs)
@@ -162,15 +154,6 @@ def fitness_function(model: torch.nn.Module, data_loader: DataLoader) -> float:
 
 
 def fitness_function_wrapper(args: Tuple[torch.nn.Module, DataLoader]) -> float:
-    """
-    Wrapper for fitness_function to be used with multiprocessing Pool.
-    
-    Args:
-        args (Tuple[torch.nn.Module, DataLoader]): Tuple containing the model and data_loader.
-    
-    Returns:
-        float: Average Dice score.
-    """
     model, data_loader = args
     return fitness_function(model, data_loader)
 
@@ -188,11 +171,11 @@ class Particle:
     
     def __init__(self, model: torch.nn.Module):
         self.model = copy.deepcopy(model)
-        self.model.to(DEVICE)
+        self.model.to(device)
         self.velocity = OrderedDict(
-            (name, torch.zeros_like(param.data, device=DEVICE)) for name, param in self.model.named_parameters()
+            (name, torch.zeros_like(param.data, device=device)) for name, param in self.model.named_parameters()
         )
-        self.best_model = copy.deepcopy(model).to(DEVICE)
+        self.best_model = copy.deepcopy(model).to(device)
         self.best_score = -np.inf
     
     def update_velocity(
@@ -212,8 +195,8 @@ class Particle:
             c2 (float): Social coefficient.
         """
         for name, param in self.model.named_parameters():
-            r1 = torch.rand_like(param.data, device=DEVICE)
-            r2 = torch.rand_like(param.data, device=DEVICE)
+            r1 = torch.rand_like(param.data, device=device)
+            r2 = torch.rand_like(param.data, device=device)
             
             personal_best_param = self.best_model.state_dict()[name]
             global_best_param = global_best_state[name]
@@ -293,7 +276,7 @@ class PSO:
         early_stopping_rounds: int = 10
     ):
         self.swarm: List[Particle] = [Particle(model) for _ in range(num_particles)]
-        self.global_best_model = copy.deepcopy(self.swarm[0].model).to(DEVICE)
+        self.global_best_model = copy.deepcopy(self.swarm[0].model).to(device)
         self.global_best_score = -np.inf
         self.fitness_func = fitness_func
         self.data_loader = data_loader
@@ -399,7 +382,7 @@ def main(model,data_loader):
     except RuntimeError:
         pass
     
-    model = model.to(DEVICE)
+    model = model.to(device)
     
     pso = PSO(
         model=model,
@@ -416,7 +399,7 @@ def main(model,data_loader):
     
     pso.step()
     
-    best_model = pso.get_best_model().to(DEVICE)
+    best_model = pso.get_best_model().to(device)
     
     torch.save(best_model.state_dict(), 'with_pso_model.pth')
     print('Best model saved as with_pso_model.pth')
@@ -429,6 +412,8 @@ def main(model,data_loader):
 
 
 if __name__ == '__main__':
-    main(model, dataloader, device, num_samples=15)
+    set_start_method('spawn')
+    main(model, annotated_loader)
+
     
 #cloner174
