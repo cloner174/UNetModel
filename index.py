@@ -14,10 +14,10 @@ drive.mount('./Drive')
 #
 
 #
-!git clone https://github.com/cloner174/UNetModel.git
+#!git clone https://github.com/cloner174/UNetModel.git
 
 # Commented out IPython magic to ensure Python compatibility.
-# %cd UNetModel
+# #!cd UNetModel
 #
 
 import os
@@ -189,7 +189,7 @@ for epoch in range(1, num_epochs + 1):
     if avg_val_loss < best_val_loss:
         best_val_loss = avg_val_loss
         torch.save(model.state_dict(), os.path.join(base_dir, 'UNet.pth'))
-        print('Best model saved! \n')
+        print('Best model saved#! \n')
 
 #train_model(model, annotated_loader, weak_loader, val_loader, device, num_epochs=2, patience=10, base_dir='./')
 
@@ -198,123 +198,8 @@ model.to(device)
 
 visualize_predictions(model, val_loader, device, num_samples=15, num_classes=1)
 
-import matplotlib.pyplot as plt
-import torch
-
-
-def visualize_predictions(model, dataloader, device, num_samples=5, num_classes=1):
-
-    model.eval()
-    images_shown = 0
-    plt.figure(figsize=(20, num_samples * 5))
-
-    with torch.no_grad():
-        for batch in dataloader:
-            if len(batch) == 4:
-                images, masks, labels, boxes = batch
-                is_annotated = True
-            else:
-                images, labels = batch
-                is_annotated = False
-
-            images = images.to(device)
-
-            if is_annotated:
-                masks = masks.to(device)
-                boxes = boxes.to(device)
-                labels = labels.to(device)
-
-            outputs_seg, outputs_cls, outputs_loc = model(images)
-
-            preds_seg = torch.argmax(outputs_seg, dim=1)
-            preds_cls = (torch.sigmoid(outputs_cls) > 0.5).float()
-            preds_loc = outputs_loc * 64.0
-
-            for i in range(images.size(0)):
-                if images_shown >= num_samples:
-                    break
-
-                img = images[i].cpu().squeeze().numpy()
-                if is_annotated:
-                    true_mask = masks[i].cpu().numpy()
-                    true_box = boxes[i].cpu().numpy() * 64.0
-                    true_label = labels[i].item()
-                else:
-                    true_mask = None
-                    true_box = None
-                    true_label = 1
-
-
-                pred_cls = preds_cls[i].item()
-
-                if int(pred_cls) == 1 :
-                    pred = torch.sigmoid(outputs_seg[i])
-                    pred_mask = pred.squeeze().cpu().numpy()
-                else:
-                    pred_mask = preds_seg[i].cpu().numpy()
-
-                pred_box = preds_loc[i].cpu().numpy()
-
-
-                plt.subplot(num_samples, 6, images_shown * 6 + 1)
-                plt.imshow(img, cmap='gray')
-                plt.title('Input Image')
-                plt.axis('off')
-
-                if is_annotated:
-                    plt.subplot(num_samples, 6, images_shown * 6 + 2)
-                    plt.imshow(true_mask, cmap='jet')
-                    plt.title('True Mask')
-                    plt.axis('off')
-                else:
-                    plt.subplot(num_samples, 6, images_shown * 6 + 2)
-                    plt.axis('off')
-
-                plt.subplot(num_samples, 6, images_shown * 6 + 3)
-                plt.imshow(pred_mask, cmap='jet')
-                plt.title('Predicted Mask')
-                plt.axis('off')
-
-                plt.subplot(num_samples, 6, images_shown * 6 + 4)
-                if is_annotated:
-                    plt.text(0.1, 0.5, f'True: {int(true_label)}\nPred: {int(pred_cls)}',
-                             fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
-                else:
-                    plt.text(0.1, 0.5, f'Pred: {int(pred_cls)}',
-                             fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
-
-                plt.title('Classification')
-                plt.axis('off')
-
-                if is_annotated:
-                    plt.subplot(num_samples, 6, images_shown * 6 + 5)
-                    plt.imshow(img, cmap='gray')
-                    plt.title('True Boxes')
-                    plt.axis('off')
-                    for b in range(0, len(true_box), 2):
-                        plt.plot(true_box[b], true_box[b+1], 'go-')
-                else:
-                    plt.subplot(num_samples, 6, images_shown * 6 + 5)
-                    plt.axis('off')
-
-                plt.subplot(num_samples, 6, images_shown * 6 + 6)
-                plt.imshow(img, cmap='gray')
-                plt.title('Pred Boxes')
-                plt.axis('off')
-                for b in range(0, len(pred_box), 2):
-                    plt.plot(pred_box[b], pred_box[b+1], 'ro-')
-
-                images_shown += 1
-
-            if images_shown >= num_samples:
-                break
-
-    plt.tight_layout()
-    plt.show()
-#cloner174
-
 #
-!cp ./UNet.pth {base_dir}
+#!cp ./UNet.pth {base_dir}
 #
 
 """استفاده از رزنت
@@ -339,21 +224,10 @@ preds_cls_v = (torch.sigmoid(outputs_cls_v.squeeze()) > 0.5).float()
 
 #outputs_seg, outputs_cls, outputs_loc = model(images)
 
-            loss_seg = criterion_seg(outputs_seg, masks.float())
-            loss_cls = criterion_cls(outputs_cls, labels)
-            loss_loc = criterion_loc(outputs_loc, boxes)
 
-            val_seg_loss += loss_seg.item() * images.size(0)
-            val_cls_loss += loss_cls.item() * images.size(0)
-            val_loc_loss += loss_loc.item() * images.size(0)
-            val_total += images.size(0)
-
-            preds_cls = (torch.sigmoid(outputs_cls) > 0.5).float()
-            correct_cls += (preds_cls == labels).sum().item()
-            total_cls += labels.size(0)
-
-preds_cls = (torch.sigmoid(outputs_cls) > 0.5).float()
+preds_cls = ( torch.sigmoid(outputs_cls) > 0.5).float()
 actual_cls = (torch.sigmoid(labels) > 0.5).float()
+
 
 preds_cls.sum().tolist(), actual_cls.sum().tolist(),
 
@@ -377,111 +251,3 @@ print(f'Loc_Metr: {loc_metr}')
 #val_loader_for_visual = DataLoader(val_dataset_for_visual, batch_size=64, shuffle=False, num_workers=4)
 
 #visualize_predictions(model, val_loader_for_visual, device, num_samples=15, num_classes=1)
-
-outputs_seg.size()
-
-images.squeeze().size()
-
-images.squeeze().cpu().numpy().shape
-
-outputs_seg.squeeze().cpu().numpy().shape
-
-masks.squeeze().cpu().numpy().shape
-
-import matplotlib.pyplot as plt
-
-plt.imshow(images.squeeze().cpu().numpy()[30] , cmap= 'gray')
-
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-
-def draw_circles_on_masked_regions(images, masks):
-    if len(images) != len(masks):
-        raise ValueError("The number of images and masks must be the same")
-    for i, (image, mask) in enumerate(zip(images, masks)):
-        binary_mask = mask.astype(np.uint8)
-        contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for contour in contours:
-            (x, y), radius = cv2.minEnclosingCircle(contour)
-            center = (int(x), int(y))
-            radius = int(radius)
-            cv2.circle(image, center, radius, (0, 255, 0), 2)
-        plt.subplot(1, len(images), i + 1)
-        plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        plt.axis('off')
-    plt.show()
-
-# Example usage
-if __name__ == "__main__":
-    # Creating some example images and masks
-    image1 = np.zeros((200, 200, 3), dtype=np.uint8)
-    image2 = np.zeros((200, 200, 3), dtype=np.uint8)
-    mask1 = np.zeros((200, 200), dtype=np.uint8)
-    mask2 = np.zeros((200, 200), dtype=np.uint8)
-
-    # Draw some example regions in masks
-    cv2.circle(mask1, (100, 100), 40, 255, -1)
-    cv2.rectangle(mask2, (50, 50), (150, 150), 255, -1)
-
-    images = [image1, image2]
-    masks = [mask1, mask2]
-
-    # Call the function to draw circles on masked regions
-    draw_circles_on_masked_regions(images, masks)
-
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-
-def draw_circles_on_masked_regions(images, masks):
-    if len(images) != len(masks):
-        raise ValueError("The number of images and masks must be the same")
-    for i, (image, mask) in enumerate(zip(images, masks)):
-        binary_mask = mask.astype(np.uint8)
-        contours, _ = cv2.findContours(masks, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for contour in contours:
-            (x, y), radius = cv2.minEnclosingCircle(contour)
-            center = (int(x), int(y))
-            radius = int(radius)
-            cv2.circle(image, center, radius, (0, 255, 0), 2)
-        plt.subplot(1, len(images), i + 1)
-        plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        plt.axis('off')
-    plt.show()
-
-masks.squeeze().cpu().numpy()[5].any()
-
-binary_mask = masks.squeeze().cpu().numpy()[5].astype(np.uint8)
-
-
-contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-plt.subplot(1, len(images), i + 1)
-
-contours
-
-cv2.minEnclosingCircle(contour)
-
-for contour in contours:
-  (x, y), radius = cv2.minEnclosingCircle(contour)
-  center = (int(x), int(y))
-  radius = int(radius)
-  cv2.circle(images.squeeze().cpu().numpy()[5], center, radius, (0, 255, 0), 2)
-
-plt.show()
-
-
-
-for contour in contours:
-
-plt.imshow(images.squeeze().cpu().numpy()[5] , cmap= 'gray')
-
-plt.imshow(masks.squeeze().cpu().numpy()[5] , cmap= 'gray')
-
-plt.imshow(outputs_seg.squeeze().cpu().numpy()[5] , cmap= 'gray')
-
-pred = torch.sigmoid(outputs_seg[5])
-plt.imshow(pred.squeeze().cpu().numpy() , cmap= 'gray')
-
-pred.squeeze().cpu().numpy()
