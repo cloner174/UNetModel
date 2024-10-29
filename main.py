@@ -234,18 +234,13 @@ def train_model(model,
 
 def train_unet(model, 
                 annotated_loader, 
-                weak_loader, 
                 val_loader,
                 device, 
                 criterion_seg=None, 
                 criterion_cls = None,
                 criterion_loc = None, 
-                num_epochs=50, 
-                patience = 10,
-                base_dir='./', 
-                w_seg = None,
-                w_cls = None,
-                w_loc = None):
+                num_epochs=5, 
+                base_dir='./'):
     
     best_val_loss = float('inf')
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
@@ -323,9 +318,6 @@ def train_unet(model,
         avg_val_loc_loss = val_loc_loss / val_total
         avg_val_loss = avg_val_seg_loss + avg_val_cls_loss + avg_val_loc_loss
         val_accuracy = correct_cls / total_cls
-    
-        scheduler.step(avg_val_loss)
-    
         print(f'Epoch [{epoch}/{num_epochs}] \n'
             f'Train Loss: {avg_train_loss:.4f} (Seg: {avg_train_seg_loss:.4f}, '
             f'Cls: {avg_train_cls_loss:.4f}, Loc: {avg_train_loc_loss:.4f}) \n'
@@ -336,6 +328,125 @@ def train_unet(model,
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), os.path.join(base_dir, 'best_model.pth'))
+            print('Best model saved! \n')
+
+
+
+def train_with_weak(model , annotated_loader, weak_loader, val_loader , device , num_epochs = 5):
+
+    criterion_cls = nn.BCEWithLogitsLoss()
+    criterion_seg = CombinedLoss()
+    criterion_loc = nn.SmoothL1Loss()
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+    best_val_loss = float('inf')
+    for epoch in range(1, num_epochs + 1):
+        model.train()
+        train_seg_loss = 0.0
+        train_cls_loss = 0.0
+        train_loc_loss = 0.0
+        train_total_annotated = 0
+        train_total_cls = 0
+        
+        for batch in tqdm(annotated_loader, desc=f'Epoch {epoch}/{num_epochs} - Annotated Training'):
+            images, masks, labels, boxes = batch
+            images = images.to(device)
+            masks = masks.to(device)
+            labels = labels.to(device).unsqueeze(1)
+            boxes = boxes.to(device)
+
+            optimizer.zero_grad()
+
+            outputs_seg, outputs_cls, outputs_loc = model(images)
+
+            loss_seg = criterion_seg(outputs_seg, masks.float())
+            loss_cls = criterion_cls(outputs_cls, labels)
+            loss_loc = criterion_loc(outputs_loc, boxes)
+
+            loss = loss_seg + loss_cls + loss_loc
+
+            loss.backward()
+            optimizer.step()
+        
+            train_seg_loss += loss_seg.item() * images.size(0)
+            train_cls_loss += loss_cls.item() * images.size(0)
+            train_loc_loss += loss_loc.item() * images.size(0)
+            train_total_annotated += images.size(0)
+            train_total_cls += images.size(0)
+    
+        for batch in tqdm(weak_loader, desc=f'Epoch {epoch}/{num_epochs} - Weak Training'):
+            images, labels = batch
+            images = images.to(device)
+            labels = labels.to(device).unsqueeze(1)
+
+            optimizer.zero_grad()
+        
+            outputs_seg, outputs_cls, outputs_loc = model(images)
+
+            loss_cls = criterion_cls(outputs_cls, labels)
+            loss = loss_cls
+
+            loss.backward()
+            optimizer.step()
+
+            train_cls_loss += loss_cls.item() * images.size(0)
+            train_total_cls += images.size(0)
+
+        avg_train_seg_loss = train_seg_loss / train_total_annotated if train_total_annotated > 0 else 0
+        avg_train_cls_loss = train_cls_loss / train_total_cls if train_total_cls > 0 else 0
+        avg_train_loc_loss = train_loc_loss / train_total_annotated if train_total_annotated > 0 else 0
+        avg_train_loss = avg_train_seg_loss + avg_train_cls_loss + avg_train_loc_loss
+
+        model.eval()
+        val_seg_loss = 0.0
+        val_cls_loss = 0.0
+        val_loc_loss = 0.0
+        val_total = 0
+        correct_cls = 0
+        total_cls = 0
+        with torch.no_grad():
+        
+            for batch in tqdm(val_loader, desc=f'Epoch {epoch}/{num_epochs} - Validation'):
+            
+                images, masks, labels, boxes = batch
+                images = images.to(device)
+                masks = masks.to(device)
+                labels = labels.to(device).unsqueeze(1)
+                boxes = boxes.to(device)
+
+                outputs_seg, outputs_cls, outputs_loc = model(images)
+            
+                loss_seg = criterion_seg(outputs_seg, masks.float())
+                loss_cls = criterion_cls(outputs_cls, labels)
+                loss_loc = criterion_loc(outputs_loc, boxes)
+
+                val_seg_loss += loss_seg.item() * images.size(0)
+                val_cls_loss += loss_cls.item() * images.size(0)
+                val_loc_loss += loss_loc.item() * images.size(0)
+                val_total += images.size(0)
+
+                preds_cls = (torch.sigmoid(outputs_cls) > 0.5).float()
+                correct_cls += (preds_cls == labels).sum().item()
+                total_cls += labels.size(0)
+
+        avg_val_seg_loss = val_seg_loss / val_total
+        avg_val_cls_loss = val_cls_loss / val_total
+        avg_val_loc_loss = val_loc_loss / val_total
+        avg_val_loss = avg_val_seg_loss + avg_val_cls_loss + avg_val_loc_loss
+        val_accuracy = correct_cls / total_cls
+
+        scheduler.step(avg_val_loss)
+    
+        print(f'Epoch [{epoch}/{num_epochs}] \n'
+            f'Train Loss: {avg_train_loss:.4f} (Seg: {avg_train_seg_loss:.4f}, '
+            f'Cls: {avg_train_cls_loss:.4f}, Loc: {avg_train_loc_loss:.4f}) \n'
+            f'Val Loss: {avg_val_loss:.4f} (Seg: {avg_val_seg_loss:.4f}, '
+            f'Cls: {avg_val_cls_loss:.4f}, Loc: {avg_val_loc_loss:.4f}) \n'
+            f'Val Acc: {val_accuracy:.4f} \n')
+
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save(model.state_dict(), os.path.join('.', 'UNet_WithWeak.pth'))
             print('Best model saved! \n')
 
 
