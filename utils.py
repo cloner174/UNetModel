@@ -176,7 +176,7 @@ def pro_prediction(model, dataloader, device, num_samples=5):
                 if is_annotated:
                     ax_true_circle = plt.subplot(num_samples, 6, images_shown * 6 + 2)
                     ax_true_circle.imshow(img, cmap='gray')
-                    ax_true_circle.set_title('True Mask & Circles')
+                    ax_true_circle.set_title('True Mask')
                     ax_true_circle.axis('off')
                     
                     mask_binary = (true_mask > 0.5).astype(np.uint8) * 255
@@ -192,7 +192,7 @@ def pro_prediction(model, dataloader, device, num_samples=5):
                 
                 ax_pred_circle = plt.subplot(num_samples, 6, images_shown * 6 + 3)
                 ax_pred_circle.imshow(img, cmap='gray')
-                ax_pred_circle.set_title('Pred Mask & Circles')
+                ax_pred_circle.set_title('Pred Mask')
                 ax_pred_circle.axis('off')
                 
                 pred_mask_binary = (pred_mask > 0.5).astype(np.uint8) * 255
