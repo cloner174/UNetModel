@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import cv2
+from datasets import PredDataset
+from torch.utils.data import DataLoader
 
 def set_size(img):
     if img.size[0] != 64 or img.size[1] != 64:
@@ -93,11 +95,10 @@ def predict(sample, model, device = None):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    num_samples = len(images)
+    pred_dataset = PredDataset(images)
+    pred_loader = DataLoader(pred_dataset, batch_size = 1, shuffle=False)
     
-    images = np.array(images)
-    images = torch.tensor(images, dtype=torch.float32)
-    
+    num_samples = len(pred_loader)
     model.to(device)
     model.eval()
     
@@ -106,14 +107,15 @@ def predict(sample, model, device = None):
     images_shown = 0
     
     with torch.no_grad():
-        outputs_seg, outputs_cls, _ = model(images)
+      for batch in pred_loader:
+        outputs_seg, outputs_cls, _ = model(batch)
         
         preds_seg = torch.argmax(outputs_seg, dim=1)
         preds_cls = (torch.sigmoid(outputs_cls) > 0.5).float()
             
-        for i in range(images.size(0)):
+        for i in range(batch.size(0)):
             
-            img = images[i].cpu().squeeze().numpy()
+            img = batch[i].cpu().squeeze().numpy()
             
             ax_img = plt.subplot(num_samples, 6, images_shown * 6 + 1)
             
@@ -128,23 +130,22 @@ def predict(sample, model, device = None):
                 pred_mask = pred.squeeze().cpu().numpy()
             else:
                 pred_mask = preds_seg[i].cpu().numpy()
-
+            
             ax_cls = plt.subplot(num_samples, 6, images_shown * 6 + 4)
             ax_cls.text(0.1, 0.5, f'Pred: {int(pred_cls)}',
                         fontsize=12, bbox=dict(facecolor='white', alpha=0.5))
             
             ax_cls.set_title('Classification')
             ax_cls.axis('off')
-
-                
+            
             ax_pred_circle = plt.subplot(num_samples, 6, images_shown * 6 + 3)
             ax_pred_circle.imshow(img, cmap='gray')
             ax_pred_circle.set_title('Pred Mask')
             ax_pred_circle.axis('off')
-                
+            
             pred_mask_binary = (pred_mask > 0.5).astype(np.uint8) * 255
             contours, _ = cv2.findContours(pred_mask_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                
+            
             for contour in contours:
                 if len(contour) > 0:
                     (x, y), radius = cv2.minEnclosingCircle(contour)
@@ -158,8 +159,4 @@ def predict(sample, model, device = None):
     plt.tight_layout()
     plt.show()
     
-                
-        
-                    
-                    
-                    
+#cloner174
