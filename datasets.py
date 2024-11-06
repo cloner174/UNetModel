@@ -85,3 +85,18 @@ class WeaklyAnnotatedDataset(Dataset):
         assert torch.isfinite(label).all(), "Label contains NaN or Inf."
         
         return image, label
+
+
+class PredDataset(Dataset):
+    
+    def __init__(self, images):
+        self.images = images
+    
+    def __len__(self):
+        return len(self.images)
+    
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        image = torch.tensor(image, dtype=torch.float32).unsqueeze(0)  # [1, H, W]
+        assert torch.isfinite(image).all(), "Image contains NaN or Inf."
+        return image
