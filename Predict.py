@@ -108,6 +108,7 @@ def predict(sample, model, device = None):
     
     with torch.no_grad():
       for batch in pred_loader:
+        batch = batch.to(device)
         outputs_seg, outputs_cls, _ = model(batch)
         
         preds_seg = torch.argmax(outputs_seg, dim=1)
