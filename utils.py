@@ -215,4 +215,114 @@ def pro_prediction(model, dataloader, device, num_samples=5):
     plt.show()
 
 
+
+def compute_metrics(model, dataloader, device, threshold=0.5, epsilon=1e-7):
+    """
+    Compute average segmentation metrics (IoU, Dice, Precision, and Recall) 
+    over the entire dataset.
+    
+    This function assumes that the dataloader returns batches with annotated
+    segmentation masks in the form:
+         (images, masks, labels, boxes)
+    If a batch does not include masks, that batch is skipped.
+    
+    The model is assumed to return three outputs:
+         outputs_seg, outputs_cls, outputs_loc
+    and the segmentation prediction is chosen as follows:
+      - If the predicted classification (after sigmoid) is positive (i.e. >0.5),
+        then the predicted mask is obtained by applying sigmoid to the segmentation 
+        output and thresholding it.
+      - Otherwise, the predicted mask is computed using argmax over the segmentation output.
+    
+    Args:
+        model (torch.nn.Module): The trained PyTorch model.
+        dataloader (torch.utils.data.DataLoader): Dataloader providing validation/test data.
+        device (torch.device): Device on which computation is performed.
+        threshold (float): Threshold to binarize predicted masks.
+        epsilon (float): Small constant to avoid division by zero.
+    
+    Returns:
+        dict: Dictionary with average metrics: IoU, Dice Score, Precision, and Recall.
+    """
+    model.eval()
+    total_iou = 0.0
+    total_dice = 0.0
+    total_precision = 0.0
+    total_recall = 0.0
+    total_samples = 0
+    with torch.no_grad():
+        for batch in dataloader:
+            # Expect annotated data with segmentation masks.
+            if len(batch) == 4:
+                images, masks, labels, boxes = batch
+            else:
+                # Skip batches without segmentation masks.
+                continue
+            
+            images = images.to(device)
+            masks = masks.to(device)
+            
+            # Run the model; adjust according to your model's output
+            outputs_seg, outputs_cls, outputs_loc = model(images)
+            preds_cls = (torch.sigmoid(outputs_cls) > 0.5).float()
+            
+            batch_size = images.size(0)
+            for i in range(batch_size):
+                # Decide which segmentation prediction to use based on classification:
+                pred_cls = preds_cls[i].item()
+                if int(pred_cls) == 1:
+                    # Use the sigmoid probabilities and threshold them.
+                    pred_prob = torch.sigmoid(outputs_seg[i])
+                    # If the segmentation head returns a single channel
+                    if pred_prob.shape[0] == 1:
+                        pred_mask = (pred_prob > threshold).float()
+                        pred_mask = pred_mask.squeeze(0)  # shape: (H, W)
+                    else:
+                        # For multi-channel segmentation, assume channel 1 is the positive class.
+                        pred_mask = (pred_prob[1] > threshold).float()
+                else:
+                    pred_mask = torch.argmax(outputs_seg[i], dim=0).float()
+                
+                # Get the corresponding ground-truth mask.
+                # Handle both (1, H, W) or (H, W) formats.
+                if masks[i].dim() == 3:
+                    true_mask = masks[i].squeeze(0)
+                else:
+                    true_mask = masks[i]
+                
+                true_mask = (true_mask > 0.5).float()
+                
+                intersection = (pred_mask * true_mask).sum()
+                union = pred_mask.sum() + true_mask.sum() - intersection
+                iou = (intersection + epsilon) / (union + epsilon)
+                
+                dice = (2 * intersection + epsilon) / (pred_mask.sum() + true_mask.sum() + epsilon)
+                
+                precision = (intersection + epsilon) / (pred_mask.sum() + epsilon)
+                recall = (intersection + epsilon) / (true_mask.sum() + epsilon)
+                
+                total_iou += iou.item()
+                total_dice += dice.item()
+                total_precision += precision.item()
+                total_recall += recall.item()
+                total_samples += 1
+    
+    if total_samples == 0:
+        return {
+            "IoU": None,
+            "Dice": None,
+            "Precision": None,
+            "Recall": None
+        }
+    
+    metrics = {
+        "IoU": total_iou / total_samples,
+        "Dice": total_dice / total_samples,
+        "Precision": total_precision / total_samples,
+        "Recall": total_recall / total_samples
+    }
+    
+    return metrics
+
+
 #cloner174
